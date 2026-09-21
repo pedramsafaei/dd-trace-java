@@ -2,6 +2,8 @@ variables:
   EXPLORATION_TESTS_IMAGE: registry.ddbuild.io/ci/dd-trace-java:exploration-tests
 
 build-exploration-tests-image:
+  rules:
+    - when: never
   stage: exploration-tests
   when: manual
   needs: []
@@ -57,6 +59,8 @@ build-exploration-tests-image:
       - "*_debugger-dumps.tar.gz"
 
 exploration-tests-method-jsoup:
+  rules:
+    - when: never
   needs: [ build ]
   dependencies:
     - build
@@ -67,6 +71,8 @@ exploration-tests-method-jsoup:
     - ./run-exploration-tests.sh "method" "$PROJECT" "mvn verify" "include_${PROJECT}.txt" "exclude_${PROJECT}.txt"
 
 exploration-tests-line-jsoup:
+  rules:
+    - when: never
   needs: [ build ]
   dependencies:
     - build
@@ -77,6 +83,8 @@ exploration-tests-line-jsoup:
     - ./run-exploration-tests.sh "line" "$PROJECT" "mvn verify" "include_${PROJECT}.txt" "exclude_${PROJECT}.txt"
 
 exploration-tests-method-jackson-core:
+  rules:
+    - when: never
   needs: [ build ]
   dependencies:
     - build
@@ -87,6 +95,8 @@ exploration-tests-method-jackson-core:
     - ./run-exploration-tests.sh "method" "$PROJECT" "mvn verify" "include_${PROJECT}.txt" "exclude_${PROJECT}.txt"
 
 exploration-tests-line-jackson-core:
+  rules:
+    - when: never
   needs: [ build ]
   dependencies:
     - build
@@ -97,6 +107,8 @@ exploration-tests-line-jackson-core:
     - ./run-exploration-tests.sh "line" "$PROJECT" "mvn verify" "include_${PROJECT}.txt" "exclude_${PROJECT}.txt"
 
 exploration-tests-method-jackson-databind:
+  rules:
+    - when: never
   needs: [ build ]
   dependencies:
     - build
@@ -107,6 +119,8 @@ exploration-tests-method-jackson-databind:
     - ./run-exploration-tests.sh "method" "$PROJECT" "./mvnw verify" "include_${PROJECT}.txt" "exclude_$PROJECT.txt"
 
 exploration-tests-line-jackson-databind:
+  rules:
+    - when: never
   needs: [ build ]
   dependencies:
     - build
@@ -117,6 +131,8 @@ exploration-tests-line-jackson-databind:
     - ./run-exploration-tests.sh "line" "$PROJECT" "./mvnw verify" "include_${PROJECT}.txt" "exclude_line_$PROJECT.txt"
 
 exploration-tests-method-okhttp:
+  rules:
+    - when: never
   needs: [ build ]
   dependencies:
     - build
