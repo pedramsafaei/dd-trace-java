@@ -5,12 +5,14 @@ import static datadog.trace.bootstrap.instrumentation.decorator.AwsRdsEndpoint.T
 import static datadog.trace.bootstrap.instrumentation.decorator.AwsRdsEndpoint.Type.CLUSTER_READER;
 import static datadog.trace.bootstrap.instrumentation.decorator.AwsRdsEndpoint.Type.INSTANCE;
 import static datadog.trace.bootstrap.instrumentation.decorator.AwsRdsEndpoint.Type.PROXY;
+import static datadog.trace.bootstrap.instrumentation.decorator.AwsRdsEndpoint.Type.SHARD_GROUP;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.params.provider.Arguments.of;
 
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -24,120 +26,156 @@ class AwsRdsEndpointTest {
 
   private static final String RDS = "orders-db.c9akciq32bzq.us-east-1.rds.amazonaws.com";
 
-  static Stream<Arguments> rdsEndpoints() {
+  static Stream<Arguments> parsesRdsEndpointArguments() {
     return Stream.of(
-        Arguments.of(RDS, "orders-db", INSTANCE, "us-east-1"),
-        Arguments.of(
+        of(RDS, "orders-db", INSTANCE, "us-east-1"),
+        of(
             "Orders-DB.C9AKCIQ32BZQ.US-EAST-1.RDS.AMAZONAWS.COM",
             "orders-db",
             INSTANCE,
             "us-east-1"),
-        Arguments.of(RDS + ".", "orders-db", INSTANCE, "us-east-1"),
-        Arguments.of(RDS + ":5432", "orders-db", INSTANCE, "us-east-1"),
-        Arguments.of(
+        of(RDS + ".", "orders-db", INSTANCE, "us-east-1"),
+        of(RDS + ":5432", "orders-db", INSTANCE, "us-east-1"),
+        of(
             "orders-db.c9akciq32bzq.us-gov-west-1.rds.amazonaws.com",
             "orders-db",
             INSTANCE,
             "us-gov-west-1"),
-        Arguments.of(
+        of(
             "orders-db.c9akciq32bzq.eu-isoe-west-1.rds.cloud.adc-e.uk",
             "orders-db",
             INSTANCE,
             "eu-isoe-west-1"),
-        Arguments.of(
+        of(
             "orders-db.c9akciq32bzq.us-isof-east-1.rds.csp.hci.ic.gov",
             "orders-db",
             INSTANCE,
             "us-isof-east-1"),
-        Arguments.of(
+        of(
             "orders-proxy.proxy-c9akciq32bzq.us-isof-south-1.rds.csp.hci.ic.gov",
             "orders-proxy",
             PROXY,
             "us-isof-south-1"),
-        Arguments.of(
+        of(
             "orders-db.c9akciq32bzq.eusc-de-east-1.rds.amazonaws.eu",
             "orders-db",
             INSTANCE,
             "eusc-de-east-1"),
-        Arguments.of(
+        of(
             "orders-db.c9akciq32bzq.rds.cn-north-1.amazonaws.com.cn",
             "orders-db",
             INSTANCE,
             "cn-north-1"),
         // China also hands out the region-before-service layout, same as the commercial partition.
-        Arguments.of(
+        of(
             "orders-db.c9akciq32bzq.cn-north-1.rds.amazonaws.com.cn",
             "orders-db",
             INSTANCE,
             "cn-north-1"),
-        Arguments.of(
+        of(
             "orders-aurora.cluster-c9akciq32bzq.cn-northwest-1.rds.amazonaws.com.cn",
             "orders-aurora",
             CLUSTER,
             "cn-northwest-1"),
         // ISO partition (aws-iso) RDS endpoints use the c2s.ic.gov DNS suffix.
-        Arguments.of(
+        of(
             "orders-db.c9akciq32bzq.us-iso-east-1.rds.c2s.ic.gov",
             "orders-db",
             INSTANCE,
             "us-iso-east-1"),
-        Arguments.of(
+        of(
             "orders-aurora.cluster-ro-c9akciq32bzq.us-iso-west-1.rds.c2s.ic.gov",
             "orders-aurora",
             CLUSTER_READER,
             "us-iso-west-1"),
         // ISO-B partition (aws-iso-b) RDS endpoints use the sc2s.sgov.gov DNS suffix.
-        Arguments.of(
+        of(
             "orders-db.c9akciq32bzq.us-isob-east-1.rds.sc2s.sgov.gov",
             "orders-db",
             INSTANCE,
             "us-isob-east-1"),
-        Arguments.of(
+        of(
             "orders-proxy.proxy-c9akciq32bzq.us-isob-east-1.rds.sc2s.sgov.gov",
             "orders-proxy",
             PROXY,
             "us-isob-east-1"),
-        Arguments.of(
+        of(
             "orders-aurora.cluster-c9akciq32bzq.us-west-2.rds.amazonaws.com",
             "orders-aurora",
             CLUSTER,
             "us-west-2"),
-        Arguments.of(
+        of(
             "orders-aurora.cluster-ro-c9akciq32bzq.us-west-2.rds.amazonaws.com",
             "orders-aurora",
             CLUSTER_READER,
             "us-west-2"),
-        Arguments.of(
+        of(
             "reporting.cluster-custom-c9akciq32bzq.us-west-2.rds.amazonaws.com",
             "reporting",
             CLUSTER_CUSTOM,
             "us-west-2"),
-        Arguments.of(
+        of(
             "orders-proxy.proxy-c9akciq32bzq.ap-southeast-2.rds.amazonaws.com",
             "orders-proxy",
             PROXY,
             "ap-southeast-2"),
-        Arguments.of(
+        of(
             "orders-ro.endpoint.proxy-c9akciq32bzq.us-east-1.rds.amazonaws.com",
             "orders-ro",
             PROXY,
             "us-east-1"),
         // User-defined RDS Proxy endpoint in the ISO partition: the extra "endpoint" label is
         // normalized away and the c2s.ic.gov suffix is still recognised.
-        Arguments.of(
+        of(
             "orders-ro.endpoint.proxy-c9akciq32bzq.us-iso-east-1.rds.c2s.ic.gov",
             "orders-ro",
             PROXY,
             "us-iso-east-1"),
-        Arguments.of(
+        of(
             "orders-ro.endpoint.proxy-c9akciq32bzq.rds.cn-north-1.amazonaws.com.cn",
             "orders-ro",
             PROXY,
+            "cn-north-1"),
+        // Aurora Limitless DB shard group endpoints.
+        of(
+            "orders.shardgrp-c9akciq32bzq.us-east-1.rds.amazonaws.com",
+            "orders",
+            SHARD_GROUP,
+            "us-east-1"),
+        of(
+            "ORDERS.SHARDGRP-C9AKCIQ32BZQ.US-EAST-1.RDS.AMAZONAWS.COM",
+            "orders",
+            SHARD_GROUP,
+            "us-east-1"),
+        of(
+            "orders.shardgrp-c9akciq32bzq.us-east-1.rds.amazonaws.com.",
+            "orders",
+            SHARD_GROUP,
+            "us-east-1"),
+        of(
+            "orders.shardgrp-c9akciq32bzq.us-east-1.rds.amazonaws.com:5432",
+            "orders",
+            SHARD_GROUP,
+            "us-east-1"),
+        of(
+            "orders.shardgrp-c9akciq32bzq.us-gov-west-1.rds.amazonaws.com",
+            "orders",
+            SHARD_GROUP,
+            "us-gov-west-1"),
+        of(
+            "orders.shardgrp-c9akciq32bzq.rds.cn-north-1.amazonaws.com.cn",
+            "orders",
+            SHARD_GROUP,
+            "cn-north-1"),
+        of(
+            "orders.shardgrp-c9akciq32bzq.cn-north-1.rds.amazonaws.com.cn",
+            "orders",
+            SHARD_GROUP,
             "cn-north-1"));
   }
 
   @ParameterizedTest(name = "parses {0}")
-  @MethodSource("rdsEndpoints")
+  @MethodSource("parsesRdsEndpointArguments")
   void parsesRdsEndpoint(
       String hostname, String identifier, AwsRdsEndpoint.Type type, String region) {
     AwsRdsEndpoint endpoint = AwsRdsEndpoint.parse(hostname);
@@ -162,6 +200,11 @@ class AwsRdsEndpointTest {
         "orders-db.c9akciq32bzq.us-east.rds.amazonaws.com",
         ".c9akciq32bzq.us-east-1.rds.amazonaws.com",
         "orders-db.cluster-.us-east-1.rds.amazonaws.com",
+        // shard group endpoints still need a valid hash after the prefix
+        "orders.shardgrp-.us-east-1.rds.amazonaws.com",
+        "orders.shardgrp-c9ak.us-east-1.rds.amazonaws.com",
+        "orders.shardgrp-c9akciq32bzq!.us-east-1.rds.amazonaws.com",
+        "orders.shardgrp-c9akciq32bzq.us-east.rds.amazonaws.com",
         // "endpoint" label only normalizes for proxy endpoints; a non-proxy third label is not RDS
         "orders-db.endpoint.c9akciq32bzq.us-east-1.rds.amazonaws.com",
         // an "endpoint" label whose next label is not a proxy hash is not normalized, so the ISO

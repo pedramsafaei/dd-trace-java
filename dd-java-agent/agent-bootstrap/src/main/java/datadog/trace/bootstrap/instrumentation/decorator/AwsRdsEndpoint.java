@@ -9,12 +9,12 @@ import java.util.Locale;
  *
  * <p>RDS hands out DNS names of the form {@code <identifier>.<hash>.<region>.rds.amazonaws.com} (or
  * {@code <identifier>.<hash>.rds.<region>.amazonaws.com.cn} in the China partition). The leading
- * label is the DB instance identifier, the Aurora cluster identifier, a custom endpoint name or an
- * RDS Proxy name depending on the {@code <hash>} label prefix. The Region is always present.
+ * label is the DB instance identifier, the Aurora cluster identifier, a custom endpoint name, an
+ * RDS Proxy name or an Aurora Limitless DB shard group name depending on the {@code <hash>} label
+ * prefix. The Region is always present.
  *
- * <p>Only the endpoint type is recoverable from the name. A cluster endpoint always names a
- * cluster, but the writer instance behind it is not part of the hostname, so this class never
- * claims an instance identifier for a cluster endpoint.
+ * <p>A cluster endpoint identifies the cluster but not the writer instance behind it, so this class
+ * never claims an instance identifier for a cluster endpoint.
  */
 public final class AwsRdsEndpoint {
 
@@ -31,7 +31,9 @@ public final class AwsRdsEndpoint {
      * {@code <proxy-name>.proxy-<hash>.<region>.rds.amazonaws.com}, or a user-defined endpoint
      * {@code <endpoint-name>.endpoint.proxy-<hash>.<region>.rds.amazonaws.com}.
      */
-    PROXY("proxy");
+    PROXY("proxy"),
+    /** {@code <shard-group-name>.shardgrp-<hash>.<region>.rds.amazonaws.com} (Aurora Limitless). */
+    SHARD_GROUP("shardgrp");
 
     private final String tagValue;
 
@@ -67,14 +69,13 @@ public final class AwsRdsEndpoint {
    *     endpoint.
    */
   public static AwsRdsEndpoint parse(final CharSequence hostname) {
-    if (hostname == null || hostname.length() < SHORTEST_DNS_SUFFIX.length()) {
+    if (hostname == null || hostname.length() < MIN_DNS_SUFFIX_LENGTH) {
       return null;
     }
     String hostnameString = hostname.toString();
     // Every RDS endpoint ends in a known AWS partition DNS suffix. Reject everything else before
-    // touching the cache so the handful of real RDS hostnames are never
-    // evicted by the unbounded stream of non-AWS database hosts, and so those hosts never pay for
-    // the label split.
+    // touching the cache, so database hosts outside AWS cannot evict RDS hostnames from it and
+    // never pay for the label split.
     if (!isPlausibleRdsHostname(hostnameString)) {
       return null;
     }
@@ -92,20 +93,17 @@ public final class AwsRdsEndpoint {
     ".csp.hci.ic.gov",
     ".amazonaws.eu"
   };
-  // The shortest suffix (".c2s.ic.gov"), used as a cheap length floor before any work.
-  private static final String SHORTEST_DNS_SUFFIX = ".c2s.ic.gov";
 
-  // The same suffixes ordered longest first, so doParse strips ".amazonaws.com.cn" rather than
-  // shortening it to ".amazonaws.com" and misreading the labels.
-  private static final String[] LONGEST_FIRST_DNS_SUFFIXES = {
-    ".amazonaws.com.cn",
-    ".cloud.adc-e.uk",
-    ".csp.hci.ic.gov",
-    ".sc2s.sgov.gov",
-    ".amazonaws.com",
-    ".amazonaws.eu",
-    ".c2s.ic.gov"
-  };
+  // Cheap length floor checked before any other work.
+  private static final int MIN_DNS_SUFFIX_LENGTH;
+
+  static {
+    int minimum = Integer.MAX_VALUE;
+    for (String suffix : DNS_SUFFIXES) {
+      minimum = Math.min(minimum, suffix.length());
+    }
+    MIN_DNS_SUFFIX_LENGTH = minimum;
+  }
 
   /**
    * O(1) check that the hostname ends with one of the known AWS partition DNS suffixes, ignoring
@@ -117,8 +115,7 @@ public final class AwsRdsEndpoint {
    * a malformed or oversized port (for example {@code ...amazonaws.com:54x2} or {@code :543210}) is
    * rejected here even though {@code doParse} would truncate at the first {@code :} and could
    * otherwise accept the labels before it. Real RDS endpoints never carry such a suffix, so
-   * rejecting them early is safe: the gate only ever keeps a superset of non-RDS hosts out of the
-   * cache, never a valid RDS endpoint.
+   * rejecting them early is safe: the gate never rejects a valid RDS endpoint.
    */
   static boolean isPlausibleRdsHostname(final String hostname) {
     int end = hostname.length();
@@ -155,7 +152,10 @@ public final class AwsRdsEndpoint {
     return end >= length && hostname.regionMatches(true, end - length, suffix, 0, length);
   }
 
-  /** The DB instance identifier, cluster identifier, custom endpoint name or proxy name. */
+  /**
+   * The DB instance identifier, cluster identifier, custom endpoint name, proxy name or shard group
+   * name.
+   */
   public String identifier() {
     return identifier;
   }
@@ -182,10 +182,9 @@ public final class AwsRdsEndpoint {
     }
 
     // Strip the partition DNS suffix so the remaining labels are the same shape in every
-    // partition. The suffix is matched longest first so one suffix cannot be mistaken for a
-    // shorter suffix.
+    // partition.
     String prefix = null;
-    for (String suffix : LONGEST_FIRST_DNS_SUFFIXES) {
+    for (String suffix : DNS_SUFFIXES) {
       if (end >= suffix.length()
           && hostname.regionMatches(end - suffix.length(), suffix, 0, suffix.length())) {
         prefix = hostname.substring(0, end - suffix.length());
@@ -210,7 +209,7 @@ public final class AwsRdsEndpoint {
 
     // After stripping the suffix an RDS endpoint is always four labels: the identifier, the hash,
     // and the Region and the literal "rds" in either order. Commercial, GovCloud and ISO endpoints
-    // put the Region before "rds" (<id>.<hash>.<region>.rds), the China partition also uses
+    // put the Region before "rds" (<id>.<hash>.<region>.rds), while the China partition can use
     // <id>.<hash>.rds.<region>, so accept both orders.
     if (labels.length != 4) {
       return NOT_RDS;
@@ -243,6 +242,9 @@ public final class AwsRdsEndpoint {
     } else if (hash.startsWith("proxy-")) {
       type = Type.PROXY;
       suffix = hash.substring("proxy-".length());
+    } else if (hash.startsWith("shardgrp-")) {
+      type = Type.SHARD_GROUP;
+      suffix = hash.substring("shardgrp-".length());
     } else {
       type = Type.INSTANCE;
       suffix = hash;
@@ -253,7 +255,9 @@ public final class AwsRdsEndpoint {
     return new AwsRdsEndpoint(identifier, type, region);
   }
 
-  /** The account-scoped hash RDS appends to every endpoint: lowercase alphanumerics only. */
+  /**
+   * The account and Region specific label RDS adds to every endpoint: lowercase alphanumerics only.
+   */
   private static boolean isHash(final String value) {
     if (value.length() < 8 || value.length() > 16) {
       return false;
